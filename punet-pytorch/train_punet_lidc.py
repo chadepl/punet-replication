@@ -17,9 +17,15 @@ from train import train_punet
 ############
 
 if True:  # we want to train a network or not
-    train_dataset = LIDCCrops(data_home="../data/lidc_crops", split="train")
+    train_dataset = LIDCCrops(data_home="../data/lidc_crops", split="train", transform=dict(resize=dict(output_size=(128, 128))))
     device = ["cpu", "mps", "cuda"][1]
-    train_punet(train_dataset=train_dataset, epochs=5, num_classes=2, num_levels_unet=3, train_id=f"{device}-lidc-patches-lv3", device=device)
+    train_punet(train_dataset=train_dataset, 
+                epochs=30,  # should be 240k iterations
+                num_classes=2, 
+                num_levels_unet=3, 
+                batch_size_train=8,
+                train_id=f"{device}-lidc-patches-lv3", 
+                device=device)
 
 
 ###########

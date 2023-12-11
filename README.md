@@ -3,8 +3,9 @@
 This repository replicates some of the results of the Probabilistic UNet paper [1]. 
 It also includes the code we used in the experiments. 
 
-## Setup
+Link to google docs: https://docs.google.com/document/d/1P1Fcg6PXJnvt2uWD0YAyhzgBoMVvOCjDkT1a38h0EVc/edit 
 
+## Setup
 
 1. `conda create --name=punet-pytorch`
 2. `conda activate punet-pytorch`

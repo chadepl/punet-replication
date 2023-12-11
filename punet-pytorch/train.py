@@ -16,10 +16,9 @@ def train_punet(train_dataset, val_dataset=None, batch_size_train=1, batch_size_
 
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size_train, shuffle=True)
 
-    net = ProbabilisticUnet(input_channels=1, 
+    net = ProbabilisticUnet(num_input_channels=1, 
                             num_classes=1, 
-                            #num_filters=[32,64,128,192], 
-                            num_filters=[32,64,128], 
+                            num_channels=[32, 64, 128, 256],  # original in paper                            
                             latent_dim=2, 
                             no_convs_fcomb=4, 
                             beta=10.0,
