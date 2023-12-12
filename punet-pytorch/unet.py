@@ -92,13 +92,13 @@ class UNet(nn.Module):
 
     def __init__(self, 
                  num_input_channels,
-                 num_channels,
+                 num_filters,
                  num_classes,
                  apply_last_layer=True, 
                  padding=True):
         super().__init__()
         self.num_input_channels = num_input_channels
-        self.num_channels = num_channels
+        self.num_filters = num_filters
         self.num_classes = num_classes
 
         self.padding = padding
@@ -107,15 +107,15 @@ class UNet(nn.Module):
         # Encoder
         self.encoder = nn.ModuleList()
 
-        for i, n_channels in enumerate(self.num_channels):
+        for i, n_filters in enumerate(self.num_filters):
 
             if i == 0:
                 pool = False
             else:
                 pool = True
 
-            in_channels = self.num_input_channels if i == 0 else self.num_channels[i-1]
-            out_channels = n_channels
+            in_channels = self.num_input_channels if i == 0 else self.num_filters[i-1]
+            out_channels = n_filters
 
             self.encoder.append(
                 DownConvBlock(in_channels, 
@@ -127,10 +127,10 @@ class UNet(nn.Module):
         # Decoder
         self.decoder = nn.ModuleList()
 
-        n = len(self.num_channels) - 2
+        n = len(self.num_filters) - 2
         for i in range(n, -1, -1):
-            in_channels = out_channels + self.num_channels[i]
-            out_channels = self.num_channels[i]
+            in_channels = out_channels + self.num_filters[i]
+            out_channels = self.num_filters[i]
             self.decoder.append(
                 UpConvBlock(
                     in_channels, 

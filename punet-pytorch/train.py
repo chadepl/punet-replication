@@ -29,7 +29,7 @@ def train_punet(train_dataset, batch_size_train=1,
 
     net = ProbabilisticUnet(num_input_channels=1,
                             num_classes=num_classes,
-                            num_channels=num_channels_unet,
+                            num_filters=num_channels_unet,
                             latent_dim=latent_dim,
                             no_convs_fcomb=no_convs_fcomb,
                             beta=beta,

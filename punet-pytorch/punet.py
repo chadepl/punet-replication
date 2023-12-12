@@ -130,7 +130,7 @@ class Fcomb(nn.Module):
 
         self.device = device
 
-        self.num_channels = num_output_channels #output channels
+        self.num_output_channels = num_output_channels #output channels
         self.num_classes = num_classes
         self.channel_axis = 1
         self.spatial_axes = [2,3]
@@ -144,16 +144,16 @@ class Fcomb(nn.Module):
             layers = []
 
             #Decoder of N x a 1x1 convolution followed by a ReLU activation function except for the last layer
-            layers.append(nn.Conv2d(self.num_filters[0]+self.latent_dim, self.num_filters[0], kernel_size=1))
+            layers.append(nn.Conv2d(self.num_filters+self.latent_dim, self.num_filters, kernel_size=1))
             layers.append(nn.ReLU(inplace=True))
 
             for _ in range(no_convs_fcomb-2):
-                layers.append(nn.Conv2d(self.num_filters[0], self.num_filters[0], kernel_size=1))
+                layers.append(nn.Conv2d(self.num_filters, self.num_filters, kernel_size=1))
                 layers.append(nn.ReLU(inplace=True))
 
             self.layers = nn.Sequential(*layers)
 
-            self.last_layer = nn.Conv2d(self.num_filters[0], self.num_classes, kernel_size=1)
+            self.last_layer = nn.Conv2d(self.num_filters, self.num_classes, kernel_size=1)
 
             self.layers.apply(lambda m: init_weights(m, init="kaiming"))
             self.last_layer.apply(lambda m: init_weights(m, init="kaiming"))
@@ -176,12 +176,12 @@ class Fcomb(nn.Module):
         So broadcast Z to batch_size x latent_dim x H x W. Behavior is exactly the same as tf.tile (verified)
         """
         if self.use_tile:
-            z = torch.unsqueeze(z,2)
+            z = torch.unsqueeze(z, 2)
             z = self.tile(z, 2, feature_map.shape[self.spatial_axes[0]])
-            z = torch.unsqueeze(z,3)
+            z = torch.unsqueeze(z, 3)
             z = self.tile(z, 3, feature_map.shape[self.spatial_axes[1]])
 
-            #Concatenate the feature map (output of the UNet) and the sample taken from the latent space
+            # Concatenate the feature map (output of the UNet) and the sample taken from the latent space
             feature_map = torch.cat((feature_map, z), dim=self.channel_axis)
             output = self.layers(feature_map)
             return self.last_layer(output)
@@ -199,10 +199,10 @@ class ProbabilisticUnet(nn.Module):
 
     def __init__(self,
                  num_input_channels=1,
-                 num_channels=[32, 64, 128, 192],
+                 num_filters=[32, 64, 128, 192],
                  num_classes=1,
                  latent_dim=6,
-                 no_convs_fcomb=4,
+                 no_convs_fcomb=3,
                  beta=10.0,
                  device=torch.device("cpu")):
         super().__init__()
@@ -211,21 +211,27 @@ class ProbabilisticUnet(nn.Module):
 
         self.input_channels = num_input_channels
         self.num_classes = num_classes
-        self.num_channels = num_channels
+        self.num_filters = num_filters
         self.latent_dim = latent_dim
         self.no_convs_per_block = 3
         self.no_convs_fcomb = no_convs_fcomb
         self.beta = beta
         self.z_prior_sample = 0
 
-        self.unet = UNet(self.input_channels, self.num_channels, self.num_classes, apply_last_layer=False, padding=True).to(self.device)
-        self.prior = AxisAlignedConvGaussian(self.input_channels, self.num_channels, self.no_convs_per_block, self.latent_dim).to(self.device)
-        self.posterior = AxisAlignedConvGaussian(self.input_channels, self.num_channels, self.no_convs_per_block, self.latent_dim, posterior=True).to(self.device)
-        self.fcomb = Fcomb(self.num_channels, self.latent_dim, self.input_channels, self.num_classes, self.no_convs_fcomb, use_tile=True, device=self.device).to(self.device)
+        self.unet = UNet(self.input_channels, self.num_filters, self.num_classes, apply_last_layer=False, padding=True).to(self.device)
+        self.prior = AxisAlignedConvGaussian(self.input_channels, self.num_filters, self.no_convs_per_block, self.latent_dim).to(self.device)
+        self.posterior = AxisAlignedConvGaussian(self.input_channels, self.num_filters, self.no_convs_per_block, self.latent_dim, posterior=True).to(self.device)
+        self.fcomb = Fcomb(self.num_filters[0], self.latent_dim, self.input_channels, self.num_classes, self.no_convs_fcomb, use_tile=True, device=self.device).to(self.device)
 
         self.unet_features = None  # defined in forward
         self.prior_latent_space = None  # defined in forward
         self.posterior_latent_space = None  # defined in forward
+
+        self.kl = None  # defined in elbo
+        self.reconstruction = None  # defined in elbo
+        self.reconstruction_loss = None  # defined in elbo
+        self.mean_reconstruction_loss = None  # defined in elbo
+
 
     def forward(self, patch, segm, training=True):
         """
@@ -237,12 +243,13 @@ class ProbabilisticUnet(nn.Module):
         self.prior_latent_space = self.prior.forward(patch)
         self.unet_features = self.unet.forward(patch)
 
+
     def sample(self, testing=False):
         """
         Sample a segmentation by reconstructing from a prior sample
         and combining this with UNet features
         """
-        if testing == False:
+        if testing is False:
             z_prior = self.prior_latent_space.rsample()
             self.z_prior_sample = z_prior
         else:
@@ -266,6 +273,7 @@ class ProbabilisticUnet(nn.Module):
                 z_posterior = self.posterior_latent_space.rsample()
         return self.fcomb.forward(self.unet_features, z_posterior)
 
+
     def kl_divergence(self, analytic=True, calculate_posterior=False, z_posterior=None):
         """
         Calculate the KL divergence between the posterior and prior KL(Q||P)
@@ -282,6 +290,7 @@ class ProbabilisticUnet(nn.Module):
             log_prior_prob = self.prior_latent_space.log_prob(z_posterior)
             kl_div = log_posterior_prob - log_prior_prob
         return kl_div
+
 
     def elbo(self, segm, analytic_kl=True, reconstruct_posterior_mean=False):
         """

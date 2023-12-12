@@ -24,16 +24,16 @@ EPOCHS = int(240000 * 32 * (1 / 8882))
 NUM_CLASSES = 1
 NUM_CHANNELS = [32, 64, 128, 256]  # original in paper   
 
-LATENT_DIM=2  # original in paper   
-NUM_CONVS_FCOMB=4 # original in paper   
-BETA=10.0 # original in paper   
+LATENT_DIM=6  # # original in paper (3 for image2image VAE and 6 for PUnet)
+NUM_CONVS_FCOMB=3 # original in paper   
+BETA=1.0 # original in paper (10 for image2image VAE and 1 for PUnet)
 
 
 ############
 # Training #
 ############
 
-if False:  # we want to train a network or not
+if True:  # we want to train a network or not
 
     transforms = dict(
         rand_elastic=dict(
@@ -71,7 +71,7 @@ if False:  # we want to train a network or not
 # Qualitative Testing #
 #######################
 
-if True:
+if False:
 
     NUM_IMGS = 5
     NUM_SAMPLES = 5
@@ -83,7 +83,7 @@ if True:
 
     net = ProbabilisticUnet(num_input_channels=1,
                             num_classes=NUM_CLASSES,
-                            num_channels=NUM_CHANNELS,
+                            num_filters=NUM_CHANNELS,
                             latent_dim=LATENT_DIM,
                             no_convs_fcomb=NUM_CONVS_FCOMB,
                             beta=BETA,
