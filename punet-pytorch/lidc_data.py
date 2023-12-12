@@ -60,28 +60,31 @@ class LIDCCrops(Dataset):
             input_size = list(img.size()[-2:])
             seg = seg.unsqueeze(dim=0)
             if "rand_elastic" in self.transform:
-                alpha=self.transform["rand_elastic"].get("alpha", [10, 10])
-                sigma=self.transform["rand_elastic"].get("sigma", [5, 5])
+                # https://pytorch.org/vision/main/generated/torchvision.transforms.ElasticTransform.html
+                alpha=self.transform["rand_elastic"].get("alpha", [50, 50])  # Magnitude of displacements. Default is 50.0. 
+                sigma=self.transform["rand_elastic"].get("sigma", [5, 5])  # Smoothness of displacements. Default is 5.0.
                 elastic_params = v2.ElasticTransform.get_params(alpha=alpha, sigma=sigma, size=input_size)
 
                 img = FT.elastic_transform(img, elastic_params, interpolation=v2.InterpolationMode.BILINEAR)
                 seg = FT.elastic_transform(seg, elastic_params, interpolation=v2.InterpolationMode.NEAREST)
 
             if "rand_affine" in self.transform:
-                degrees=self.transform["rand_affine"].get("degrees", [-10, 10])
-                translate=self.transform["rand_affine"].get("translate", None)
-                scale_ranges=self.transform["rand_affine"].get("scale_ranges", [0.8, 1.2])
-                shears=self.transform["rand_affine"].get("shears", [0, 5, 0, 5])
-                affine_params = v2.RandomAffine.get_params(degrees=degrees, 
-                                                        translate=translate,
-                                                        scale_ranges=scale_ranges,
-                                                        shears=shears,
-                                                        img_size=input_size)
+                # https://pytorch.org/vision/main/generated/torchvision.transforms.v2.RandomAffine.html#torchvision.transforms.v2.RandomAffine
+                degrees=self.transform["rand_affine"].get("degrees", [0, 0])  # default is no rotation
+                translate=self.transform["rand_affine"].get("translate", None)  # default is no translation
+                scale_ranges=self.transform["rand_affine"].get("scale_ranges", None)  # default is no scaling
+                shears=self.transform["rand_affine"].get("shears", None)  # default is no shearing
+                affine_params = v2.RandomAffine.get_params(degrees=degrees,
+                                                           translate=translate,
+                                                           scale_ranges=scale_ranges,
+                                                           shears=shears,
+                                                           img_size=input_size)
 
                 img = FT.affine(img, *affine_params, interpolation=v2.InterpolationMode.BILINEAR)
                 seg = FT.affine(seg, *affine_params, interpolation=v2.InterpolationMode.NEAREST)
 
             if "rand_crop" in self.transform:
+                # https://pytorch.org/vision/main/generated/torchvision.transforms.v2.RandomCrop.html#torchvision.transforms.v2.RandomCrop
                 output_size=self.transform["rand_crop"].get("output_size", input_size)
                 crop_params = v2.RandomCrop.get_params(img, output_size=output_size)
 
@@ -112,21 +115,3 @@ class LIDCCrops(Dataset):
             for image_id in self.patient_img_lab_dict[patient_id].keys():
                 out.append((patient_id, image_id))
         return out
-    
-
-if __name__ == "__main__":
-    dataset = LIDCCrops(".", "train")
-    print(len(dataset))
-
-    metadata, img, seg = dataset[100]
-
-    print(metadata)
-    print(img.shape)
-    print(seg.shape)
-
-    import napari
-
-    viewer = napari.Viewer()
-    viewer.add_image(img.numpy().squeeze())
-    viewer.add_labels(seg.numpy())
-    napari.run()
