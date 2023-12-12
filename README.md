@@ -11,6 +11,7 @@ Link to google docs: https://docs.google.com/document/d/1P1Fcg6PXJnvt2uWD0YAyhzg
 2. `conda activate punet-pytorch`
 3. `pip install torch torchvision torchaudio`
 4. `pip install tqdm matplotlib scikit-image`
+5. `pip install wandb` for logging
 
 To train the network:
 - `cd punet-pytorch`
