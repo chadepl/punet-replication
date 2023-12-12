@@ -5,27 +5,35 @@ import torch
 from torch.utils.data import DataLoader
 from torch import optim
 from torch import nn
-from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 from lidc_data import LIDCCrops
 
 from train import train_punet
+from punet import ProbabilisticUnet
+
+##########
+# Params #
+##########
+
+# For now shared to avoid problems in train/test scenarios
+
+BATCH_SIZE = 32
+DEVICE = ["cpu", "mps", "cuda"][1]
+EPOCHS = int(240000 * 32 * (1 / 8882))
+NUM_CLASSES = 1
+NUM_CHANNELS = [32, 64, 128, 256]  # original in paper   
+
+LATENT_DIM=2  # original in paper   
+NUM_CONVS_FCOMB=4 # original in paper   
+BETA=10.0 # original in paper   
 
 
 ############
 # Training #
 ############
 
-if True:  # we want to train a network or not
-    BATCH_SIZE = 8
-    DEVICE = ["cpu", "mps", "cuda"][1]
-    EPOCHS = int(240000 * 32 * (1 / 8882))
-    NUM_CLASSES = 1
-    NUM_CHANNELS = [32, 64, 128, 256]  # original in paper   
-
-    LATENT_DIM=2  # original in paper   
-    NUM_CONVS_FCOMB=4 # original in paper   
-    BETA=10.0 # original in paper   
+if False:  # we want to train a network or not
 
     transforms = dict(
         rand_elastic=dict(
@@ -59,43 +67,79 @@ if True:  # we want to train a network or not
                 device=DEVICE)
 
 
-###########
-# Testing #
-###########
+#######################
+# Qualitative Testing #
+#######################
 
-if False:  # we want to test the network
+if True:
 
-    # Load checkpoint and visualize results
+    NUM_IMGS = 5
+    NUM_SAMPLES = 5
+    PROB_ISOVAL = 0.8
 
-    # visualization
-    checkpoint_path = Path("../../models/2d/unet/model_checkpoints/unet_lidc-patches-lv3/checkpoint_epoch-05.pth")
+    # Load model
+    checkpoint_path = Path("model_checkpoints/punet_mps-lidc-patches-lv3/checkpoint_epoch-01.pth")
     state_dict = torch.load(str(checkpoint_path))
-    test_net = UNet(num_levels=3)
-    test_net.load_state_dict(state_dict=state_dict)
 
-    num_elements = 5
-    test_dataset = LIDCCrops(data_home="../../data/real/lidc_crops", split="test")
-    metadatas, imgs, segs = zip(*[test_dataset[i] for i in np.random.choice(np.arange(len(test_dataset)), num_elements, replace=False)])
+    net = ProbabilisticUnet(num_input_channels=1,
+                            num_classes=NUM_CLASSES,
+                            num_channels=NUM_CHANNELS,
+                            latent_dim=LATENT_DIM,
+                            no_convs_fcomb=NUM_CONVS_FCOMB,
+                            beta=BETA,
+                            device=DEVICE)
+    net.to(DEVICE)
+
+    #net.load_state_dict(state_dict=state_dict)
+
+    # Get random images
+    test_dataset = LIDCCrops(data_home="../data/lidc_crops", split="test", transform=dict(resize=dict(output_size=(128, 128))))
+    metadatas, imgs, segs = zip(*[test_dataset[i] for i in np.random.choice(np.arange(len(test_dataset)), NUM_IMGS, replace=False)])
     
     imgs = [img.unsqueeze(dim=0) for img in imgs]    
     imgs = torch.cat(imgs, dim=0)
 
-    logits = test_net(imgs)
-    probs = nn.Softmax(dim=1)(logits)
-    pred = torch.argmax(probs, dim=1)
+    imgs = imgs.to(DEVICE)
 
-    vis_img = imgs[:, 0, :, :].numpy()
-    vis_seg = np.concatenate([seg[np.newaxis] for seg in segs], axis=0)
-    vis_probs0 = probs[:, 0, :, :].detach().numpy()
-    vis_probs1 = probs[:, 1, :, :].detach().numpy()
-    vis_pred = pred.detach().numpy()
+    probs = []
+    preds = []
+    for nsample in range(NUM_SAMPLES):
+        net(imgs, None, training=False)  # Run net (this initializes the unet features and the latent space)
+        prob = net.sample(testing=True)  # samples a segmentation using the unet features + the latent space
+        
+        pred = prob > PROB_ISOVAL
 
-    import napari
+        # Use when num classes > 1
+        # prob = nn.Softmax(dim=1)(sample)
+        # pred = torch.argmax(probs, dim=1)
 
-    viewer = napari.Viewer()
-    viewer.add_image(vis_img)
-    viewer.add_labels(vis_seg)
-    # viewer.add_image(vis_probs0)
-    # viewer.add_image(vis_probs1)
-    viewer.add_labels(vis_pred)
-    napari.run()
+        probs.append(prob)
+        preds.append(pred)
+
+
+    # plot
+    map_to_vis = [probs, preds][0]
+
+    fig, axs = plt.subplots(nrows=NUM_IMGS, ncols=NUM_SAMPLES+1, layout="tight")
+
+    # - plot imgs
+    for img_i in range(NUM_IMGS):
+        axs[img_i, 0].imshow(imgs.cpu().numpy()[img_i, 0])
+        axs[img_i, 0].set_ylabel(f"Image {img_i}")
+
+    # - plot samples
+    for sample_i in range(NUM_SAMPLES):
+        axs[0, sample_i + 1].set_title(f"Sample {sample_i}")
+        for img_i in range(NUM_IMGS):
+            axs[img_i, sample_i + 1].imshow(map_to_vis[sample_i].detach().cpu().numpy()[img_i, 0])
+
+    for ax in axs.flatten():
+        # Hide X and Y axes label marks
+        ax.xaxis.set_tick_params(labelbottom=False)
+        ax.yaxis.set_tick_params(labelleft=False)
+
+        # Hide X and Y axes tick marks
+        ax.set_xticks([])
+        ax.set_yticks([])
+
+    plt.show()
