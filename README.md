@@ -7,7 +7,7 @@ Link to google docs: https://docs.google.com/document/d/1P1Fcg6PXJnvt2uWD0YAyhzg
 
 ## Setup
 
-1. `conda create --name=punet-pytorch`
+1. `conda create --name=punet-pytorch python=3.9`
 2. `conda activate punet-pytorch`
 3. `pip install torch torchvision torchaudio`
 4. `pip install tqdm matplotlib scikit-image`
