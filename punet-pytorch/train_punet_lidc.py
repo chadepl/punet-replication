@@ -33,7 +33,7 @@ BETA=1.0 # original in paper (10 for image2image VAE and 1 for PUnet)
 # Training #
 ############
 
-if True:  # we want to train a network or not
+if False:  # we want to train a network or not
 
     transforms = dict(
         rand_elastic=dict(
@@ -71,15 +71,15 @@ if True:  # we want to train a network or not
 # Qualitative Testing #
 #######################
 
-if False:
+if True:
 
     NUM_IMGS = 5
     NUM_SAMPLES = 5
     PROB_ISOVAL = 0.8
 
     # Load model
-    checkpoint_path = Path("model_checkpoints/punet_mps-lidc-patches-lv3/checkpoint_epoch-01.pth")
-    state_dict = torch.load(str(checkpoint_path))
+    checkpoint_path = Path("training_logs/NicolasWork-lidc-patches-lv3/model_checkpoints//checkpoint_epoch-20.pth")
+    state_dict = torch.load(str(checkpoint_path), map_location=torch.device(DEVICE))
 
     net = ProbabilisticUnet(num_input_channels=1,
                             num_classes=NUM_CLASSES,
@@ -90,7 +90,7 @@ if False:
                             device=DEVICE)
     net.to(DEVICE)
 
-    #net.load_state_dict(state_dict=state_dict)
+    net.load_state_dict(state_dict=state_dict)
 
     # Get random images
     test_dataset = LIDCCrops(data_home="../data/lidc_crops", split="test", transform=dict(resize=dict(output_size=(128, 128))))
