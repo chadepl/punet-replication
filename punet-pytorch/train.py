@@ -16,15 +16,14 @@ import wandb
 # -- Network checkpoint
 # -- Confusion matrix 
 
-VAL_FREQ = 10  # run validation every number of epochs
-LEARNING_RATE = 1e-4
-REG_WEIGHT = 1e-5
+WANDB_LOGGING = False
 
 def train_punet(train_dataset, batch_size_train=1,
                 val_dataset=None, batch_size_val=1,
                 num_classes=1, num_channels_unet=[32, 64, 128, 256],
                 latent_dim=2, no_convs_fcomb=4, beta=10.0,
-                epochs=5, train_id=None, device="cpu"):
+                val_freq=10, learning_rate=1e-4, reg_weight=1e-5,
+                epochs=5, train_id=None, device="cpu", num_workers=1):
     
     saving_path = Path(f"training_logs/{train_id}")
     if saving_path.exists():
@@ -33,31 +32,32 @@ def train_punet(train_dataset, batch_size_train=1,
         saving_path.mkdir(parents=True)
         saving_path.joinpath("model_checkpoints").mkdir()
 
-        wandb.init(
-        # set the wandb project where this run will be logged
-            entity="punet-replication",
-            project="pytorch-replication",
-            name=f"{device}-{train_id}",
-            
-            # track hyperparameters and run metadata
-            config={
-            "learning_rate": LEARNING_RATE,
-            "regularization-weight": REG_WEIGHT,
-            "architecture": "PUNet",
-            "dataset": "LIDC",
-            "epochs": epochs,
-            "device": device,
-            "num_classes":num_classes,
-            "num_channels_unet":num_channels_unet,
-            "latent_dim":latent_dim,
-            "no_convs_fcomb":no_convs_fcomb,
-            "beta": beta
-            }
-        )
+        if WANDB_LOGGING:
+            wandb.init(
+            # set the wandb project where this run will be logged
+                entity="punet-replication",
+                project="pytorch-replication",
+                name=f"{device}-{train_id}",
+                
+                # track hyperparameters and run metadata
+                config={
+                "learning_rate": learning_rate,
+                "regularization-weight": reg_weight,
+                "architecture": "PUNet",
+                "dataset": "LIDC",
+                "epochs": epochs,
+                "device": device,
+                "num_classes":num_classes,
+                "num_channels_unet":num_channels_unet,
+                "latent_dim":latent_dim,
+                "no_convs_fcomb":no_convs_fcomb,
+                "beta": beta
+                }
+            )
 
         device = torch.device(device)
 
-        train_dataloader = DataLoader(train_dataset, batch_size=batch_size_train, shuffle=True)
+        train_dataloader = DataLoader(train_dataset, batch_size=batch_size_train, shuffle=True, num_workers=num_workers, prefetch_factor=8, pin_memory=True, persistent_workers=True)
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size_val, shuffle=False)
 
         net = ProbabilisticUnet(num_input_channels=1,
@@ -70,7 +70,7 @@ def train_punet(train_dataset, batch_size_train=1,
         net.to(device)
 
         # Los is defined in each iteration
-        optimizer = torch.optim.Adam(net.parameters(), lr=LEARNING_RATE, weight_decay=0)
+        optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate, weight_decay=0)
 
         for epoch in range(1, epochs + 1):
 
@@ -91,7 +91,7 @@ def train_punet(train_dataset, batch_size_train=1,
 
                     elbo = net.elbo(seg)
                     reg_loss = l2_regularisation(net.posterior) + l2_regularisation(net.prior) + l2_regularisation(net.fcomb.layers)
-                    loss_val = -elbo + REG_WEIGHT * reg_loss
+                    loss_val = -elbo + reg_weight * reg_loss
 
                     optimizer.zero_grad()
                     loss_val.backward()
@@ -100,14 +100,15 @@ def train_punet(train_dataset, batch_size_train=1,
                     epoch_losses.append(loss_val.item())
                     running_loss = np.array(epoch_losses).mean()
 
-                    wandb.log({"epoch": epoch, "acc":net.elbo, "loss": net.reconstruction_loss})
+                    if WANDB_LOGGING:
+                        wandb.log({"epoch": epoch, "acc":net.elbo, "loss": net.reconstruction_loss})
 
                     pbar.update(1)
                     pbar.set_description(f"Epoch {epoch}/{epochs} (loss: {running_loss:.2f})")
 
 
             # Validate
-            if epoch % VAL_FREQ == 0:   
+            if epoch % val_freq == 0:   
                 print(f"Saving model checkpoint of epoch {epoch:02d}")       
                 checkpoint_path = saving_path.joinpath("model_checkpoints")
                 state_dict = net.state_dict()
