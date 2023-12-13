@@ -35,7 +35,9 @@ def train_punet(train_dataset, batch_size_train=1,
         if WANDB_LOGGING:
             wandb.init(
             # set the wandb project where this run will be logged
+                entity="punet-replication",
                 project="pytorch-replication",
+                name=f"{device}-{train_id}",
                 
                 # track hyperparameters and run metadata
                 config={
