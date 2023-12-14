@@ -28,7 +28,7 @@ REG_WEIGHT = 1e-5
 NUM_WORKERS = 32
 
 # Load model
-checkpoint_path = Path("training_logs/NicolasWork-lidc-patches-lv3/model_checkpoints//checkpoint_epoch-20.pth")
+checkpoint_path = Path("training_logs/NicolasWork-lidc-patches-lv3/model_checkpoints//checkpoint_epoch-40.pth")
 state_dict = torch.load(str(checkpoint_path), map_location=torch.device(DEVICE))
 
 net = ProbabilisticUnet(num_input_channels=1,
@@ -50,8 +50,9 @@ image_keys = test_dataset.get_patient_image_ids()
 num_samples= [1,4,8,16][1]
 
 output_size=(128, 128)
+sigmoid = torch.nn.Sigmoid()
 
-for (patient_id, image_id) in image_keys:
+for (patient_id, image_id) in image_keys[1:]:
     img, segs = test_dataset.get_img_segs(patient_id, image_id)
 
     print(type(img))
@@ -83,7 +84,8 @@ for (patient_id, image_id) in image_keys:
         # min=prob.min()
         # max=prob.max()
         # prob = (prob-min)/(max-min)
-        pred = prob > 0
+        pred = (prob > 0.5).float()
+        #pred = sigmoid(prob)
         
         preds.append(pred)
         axs[1,j].imshow(pred.detach().cpu().numpy()[0, 0],cmap='gray')
