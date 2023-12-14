@@ -3,6 +3,8 @@
 from pathlib import Path
 import numpy as np
 import torch
+from torchvision.transforms import v2
+from torchvision.transforms.v2 import functional as FT
 import matplotlib.pyplot as plt
 
 from lidc_data import LIDCCrops
@@ -10,7 +12,7 @@ from lidc_data import LIDCCrops
 from punet import ProbabilisticUnet
 
 BATCH_SIZE = 32
-DEVICE = ["cpu", "mps", "cuda"][2]
+DEVICE = ["cpu", "mps", "cuda"][0]
 EPOCHS = int(240000 * 32 * (1 / 8882))
 NUM_CLASSES = 1
 NUM_CHANNELS = [32, 64, 128, 256]  # original in paper   
@@ -47,21 +49,31 @@ image_keys = test_dataset.get_patient_image_ids()
 
 num_samples= [1,4,8,16][1]
 
+output_size=(128, 128)
+
 for (patient_id, image_id) in image_keys:
     img, segs = test_dataset.get_img_segs(patient_id, image_id)
+
+    print(type(img))
+    print(type(segs))
+
+    img = torch.from_numpy(img.astype(np.float32)).unsqueeze(dim=0) # we add the channel dim
+    segs = [torch.from_numpy(seg.astype(np.uint8)).long().unsqueeze(dim=0) for seg in segs] # we add the channel dim
+
+    # Resize to make compatible with network
+    img = FT.resize(img, size=output_size, interpolation=v2.InterpolationMode.BILINEAR)
+    seg = [FT.resize(seg, size=output_size, interpolation=v2.InterpolationMode.NEAREST) for seg in segs]
 
     num_mode = len(segs)
     print(num_mode)
     fig, axs = plt.subplots(nrows=2, ncols=num_mode+1, layout="tight")
 
-    axs[0,0].imshow(img,cmap='gray')
+    axs[0,0].imshow(img.numpy().squeeze(),cmap='gray')
 
     for j in range(num_mode):
-        axs[0,j+1].imshow(segs[j],cmap='gray')
+        axs[0,j+1].imshow(segs[j].numpy().squeeze(),cmap='gray')
 
-    img = torch.from_numpy(img.astype(np.float32)).unsqueeze(dim=0)
-    img = img.unsqueeze(dim=0)
-
+    img = img.unsqueeze(dim=0)  # adds batch dim
     img = img.to(DEVICE)
     net(img, None, training=False)  # Run net (this initializes the unet features and the latent space)
 
@@ -74,7 +86,7 @@ for (patient_id, image_id) in image_keys:
         pred = prob > 0
         
         preds.append(pred)
-        axs[1,j].imshow(pred.detach().cpu().numpy()[0],cmap='gray')
+        axs[1,j].imshow(pred.detach().cpu().numpy()[0, 0],cmap='gray')
 
     break
 
