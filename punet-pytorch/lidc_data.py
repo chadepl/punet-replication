@@ -115,3 +115,16 @@ class LIDCCrops(Dataset):
             for image_id in self.patient_img_lab_dict[patient_id].keys():
                 out.append((patient_id, image_id))
         return out
+
+    def get_img_segs(self,patient_id,image_id):
+
+        img = imread(self.split_path.joinpath(f"images/{patient_id}/{image_id}.png"))
+        img = (img - img.min())/(img.max() - img.min())
+
+        segs = []
+        for segpath in self.patient_img_lab_dict[patient_id][image_id]:
+            seg = imread(segpath)
+            seg[seg>0] = 1
+            segs.append(seg)
+
+        return img, segs
