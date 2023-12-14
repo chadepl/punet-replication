@@ -1,4 +1,4 @@
-# from eval_util import get_energy_distance_components
+from eval_util import get_energy_distance_components, calc_energy_distances
 
 from pathlib import Path
 import numpy as np
@@ -8,6 +8,7 @@ from torchvision.transforms.v2 import functional as FT
 import matplotlib.pyplot as plt
 
 from lidc_data import LIDCCrops
+import pickle
 
 from punet import ProbabilisticUnet
 
@@ -47,50 +48,74 @@ test_dataset = LIDCCrops(data_home="../data/lidc_crops", split="test", transform
 
 image_keys = test_dataset.get_patient_image_ids()
 
-num_samples= [1,4,8,16][1]
+num_samples= 16
 
 output_size=(128, 128)
-sigmoid = torch.nn.Sigmoid()
 
-for (patient_id, image_id) in image_keys[1:]:
-    img, segs = test_dataset.get_img_segs(patient_id, image_id)
+eval_class_ids = [1]
+num_modes = 4
 
-    print(type(img))
-    print(type(segs))
+def eval():
+    d_matrices = {'YS': np.zeros(shape=(len(image_keys), num_modes, num_samples, len(eval_class_ids)),
+                                    dtype=np.float32),
+                    'YY': np.ones(shape=(len(image_keys), num_modes, num_modes, len(eval_class_ids)),
+                                    dtype=np.float32),
+                    'SS': np.ones(shape=(len(image_keys), num_samples, num_samples, len(eval_class_ids)),
+                                    dtype=np.float32)}
 
-    img = torch.from_numpy(img.astype(np.float32)).unsqueeze(dim=0) # we add the channel dim
-    segs = [torch.from_numpy(seg.astype(np.uint8)).long().unsqueeze(dim=0) for seg in segs] # we add the channel dim
+    img_n = 0
+    for (patient_id, image_id) in image_keys:
+        img, segs = test_dataset.get_img_segs(patient_id, image_id)
 
-    # Resize to make compatible with network
-    img = FT.resize(img, size=output_size, interpolation=v2.InterpolationMode.BILINEAR)
-    seg = [FT.resize(seg, size=output_size, interpolation=v2.InterpolationMode.NEAREST) for seg in segs]
+        img = torch.from_numpy(img.astype(np.float32)).unsqueeze(dim=0) # we add the channel dim
 
-    num_mode = len(segs)
-    print(num_mode)
-    fig, axs = plt.subplots(nrows=2, ncols=num_mode+1, layout="tight")
+        # Resize to make compatible with network
+        img = FT.resize(img, size=output_size, interpolation=v2.InterpolationMode.BILINEAR)
+        segs = [torch.from_numpy(seg.astype(np.uint8)).long().unsqueeze(dim=0) for seg in segs] # we add the channel dim
+        segs = [FT.resize(seg, size=output_size, interpolation=v2.InterpolationMode.NEAREST) for seg in segs]
 
-    axs[0,0].imshow(img.numpy().squeeze(),cmap='gray')
 
-    for j in range(num_mode):
-        axs[0,j+1].imshow(segs[j].numpy().squeeze(),cmap='gray')
+        img = img.unsqueeze(dim=0)  # adds batch dim
+        img = img.to(DEVICE)
+        net(img, None, training=False)  # Run net (this initializes the unet features and the latent space)
 
-    img = img.unsqueeze(dim=0)  # adds batch dim
-    img = img.to(DEVICE)
-    net(img, None, training=False)  # Run net (this initializes the unet features and the latent space)
+        preds = []
+        for j in range(num_samples):
+            prob = net.sample(testing=True)  # samples a segmentation using the unet features + the latent space
+            pred = (prob > 0).float()
+            preds.append(pred)
 
-    preds = []
-    for j in range(5):
-        prob = net.sample(testing=True)  # samples a segmentation using the unet features + the latent space
-        # min=prob.min()
-        # max=prob.max()
-        # prob = (prob-min)/(max-min)
-        pred = (prob > 0.5).float()
-        #pred = sigmoid(prob)
+        gt_seg_modes = np.asarray([seg.unsqueeze(dim=0).numpy() for seg in segs])
+        seg_samples = np.asarray([pred.detach().cpu().numpy() for pred in preds])
+
+        energy_dist = get_energy_distance_components(gt_seg_modes=gt_seg_modes, seg_samples=seg_samples,eval_class_ids=eval_class_ids, ignore_mask=None)
         
-        preds.append(pred)
-        axs[1,j].imshow(pred.detach().cpu().numpy()[0, 0],cmap='gray')
+        for k in d_matrices.keys():
+            d_matrices[k][img_n] = energy_dist[k]
 
-    break
+        img_n += 1
+    
+    with open('matrices.pkl', 'wb') as fp:
+        pickle.dump(d_matrices, fp)
 
-plt.show()
+eval()
+
+with open('matrices.pkl', 'rb') as fp:
+    d_matrices = pickle.load(fp)
+
+
+e_distances = []
+e_means = []
+for s in [1,4,8,16]:
+    e_dist = calc_energy_distances(d_matrices, num_samples=s) 
+    e_dist = e_dist[~np.isnan(e_dist)]
+    e_distances.append(e_dist)
+    e_means.append(np.mean(e_dist))
+
+print(e_means)
+
+with open('energy.pkl', 'wb') as fp:
+    pickle.dump(e_distances, fp)
+    pickle.dump(e_means, fp)
+
 
