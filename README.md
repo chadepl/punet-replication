@@ -3,6 +3,9 @@
 This repository replicates some of the results of the paper A probabilistic u-net for segmentation of ambiguous images [1]. 
 A write up of the replication can be found at [this link](https://docs.google.com/document/d/1P1Fcg6PXJnvt2uWD0YAyhzgBoMVvOCjDkT1a38h0EVc/edit). 
 
+The original code can be found at [this](https://github.com/stefanknegt/Probabilistic-Unet-Pytorch) link. 
+We adapted it to improve readability and also ease of use for conducting experiments and doing inference.
+
 ## Setup
 
 1. `conda create --name=punet-pytorch python=3.9`

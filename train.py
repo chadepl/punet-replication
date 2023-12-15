@@ -9,13 +9,6 @@ from utils import l2_regularisation
 
 import wandb
 
-# TODO:
-# - we want to train for 240k iterations, in the paper they used batch size 32 so 240k its x 32 BS = 7,680,000 images shown to the network in training
-# - 7,680,000 x (1/8882 imgs) = 864.67 is the number of times the whole training set was seen -> this is our number of epochs
-# - we want to validate + save checkpoints every 10 epochs, at each validation stage we save the following info:
-# -- Network checkpoint
-# -- Confusion matrix 
-
 WANDB_LOGGING = False
 
 def train_punet(train_dataset, batch_size_train=1,

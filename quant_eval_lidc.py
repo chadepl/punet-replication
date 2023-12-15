@@ -14,6 +14,8 @@ import pandas as pd
 
 from punet import ProbabilisticUnet
 
+PATH_TO_DATA = "data/lidc_crops"
+
 BATCH_SIZE = 32
 DEVICE = ["cpu", "mps", "cuda"][0]
 EPOCHS = int(240000 * 32 * (1 / 8882))
@@ -46,7 +48,7 @@ net.to(DEVICE)
 net.load_state_dict(state_dict=state_dict)
 
 # load test dataset
-test_dataset = LIDCCrops(data_home="../data/lidc_crops", split="test", transform=dict(resize=dict(output_size=(128, 128))))
+test_dataset = LIDCCrops(data_home=PATH_TO_DATA, split="test", transform=dict(resize=dict(output_size=(128, 128))))
 
 image_keys = test_dataset.get_patient_image_ids()
 
