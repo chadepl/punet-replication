@@ -10,6 +10,7 @@ A write up of the replication can be found at [this link](https://docs.google.co
 3. `pip install torch torchvision torchaudio`
 4. `pip install tqdm matplotlib scikit-image`
 5. `pip install wandb` for logging
+6. `pip install seaborn pandas` for evaluation
 
 To train the network:
 - `cd punet-pytorch`
