@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 
 from lidc_data import LIDCCrops
 import pickle
+import seaborn as sns
+import pandas as pd
 
 from punet import ProbabilisticUnet
 
@@ -43,7 +45,7 @@ net.to(DEVICE)
 
 net.load_state_dict(state_dict=state_dict)
 
-# Get random images
+# load test dataset
 test_dataset = LIDCCrops(data_home="../data/lidc_crops", split="test", transform=dict(resize=dict(output_size=(128, 128))))
 
 image_keys = test_dataset.get_patient_image_ids()
@@ -53,16 +55,15 @@ num_samples= 16
 output_size=(128, 128)
 
 eval_class_ids = [1]
-num_modes = 4
+num_modes = 4 # 4 gradiers for each image to generate 4 ground truth segmentation in dataset 
 
-def eval():
-    d_matrices = {'YS': np.zeros(shape=(len(image_keys), num_modes, num_samples, len(eval_class_ids)),
-                                    dtype=np.float32),
-                    'YY': np.ones(shape=(len(image_keys), num_modes, num_modes, len(eval_class_ids)),
-                                    dtype=np.float32),
-                    'SS': np.ones(shape=(len(image_keys), num_samples, num_samples, len(eval_class_ids)),
-                                    dtype=np.float32)}
-
+# iterate on test images to generate samples from trained model and calcuate energy distance. 
+def eval_matrix(matrixfilename):
+    d_matrices = {'YS': np.zeros(shape=(len(image_keys), num_modes, num_samples, len(eval_class_ids)),dtype=np.float32),
+                  'YY': np.ones(shape=(len(image_keys), num_modes, num_modes, len(eval_class_ids)),dtype=np.float32),
+                  'SS': np.ones(shape=(len(image_keys), num_samples, num_samples, len(eval_class_ids)),dtype=np.float32)}
+    
+    # iterate all images
     img_n = 0
     for (patient_id, image_id) in image_keys:
         img, segs = test_dataset.get_img_segs(patient_id, image_id)
@@ -82,7 +83,8 @@ def eval():
         preds = []
         for j in range(num_samples):
             prob = net.sample(testing=True)  # samples a segmentation using the unet features + the latent space
-            pred = (prob > 0).float()
+            prob = torch.sigmoid(prob)
+            pred = (prob > 0.5).float() # get segmentation result from probs
             preds.append(pred)
 
         gt_seg_modes = np.asarray([seg.unsqueeze(dim=0).numpy() for seg in segs])
@@ -95,27 +97,61 @@ def eval():
 
         img_n += 1
     
-    with open('matrices.pkl', 'wb') as fp:
+    with open(matrixfilename, 'wb') as fp:
         pickle.dump(d_matrices, fp)
 
-eval()
 
-with open('matrices.pkl', 'rb') as fp:
-    d_matrices = pickle.load(fp)
+# calculate energy distances for each sample size
+def eval_energy(matrixfilename, energyfilename):
+    with open(matrixfilename, 'rb') as fp:
+        d_matrices = pickle.load(fp)
+
+    e_distances = []
+    e_means = []
+
+    for s in [1,4,8,16]:
+        e_dist = calc_energy_distances(d_matrices, num_samples=s) 
+        e_dist = e_dist[~np.isnan(e_dist)]
+        e_distances.append(e_dist)
+        e_means.append(np.mean(e_dist))
+
+    with open(energyfilename, 'wb') as fp:
+        pickle.dump(e_distances, fp)
+        pickle.dump(e_means, fp)
+
+# draw stripplot
+def draw_plot(energyfilename):
+    with open(energyfilename, 'rb') as fp:
+        e_distances= pickle.load(fp)
+        e_means = pickle.load(fp)
+
+    s = [1,4,8,16]
+    samples_column = []
+    for i in range(len(e_distances)):
+        samples_column.extend([s[i]] * len(e_distances[i]))
+
+    energy = pd.DataFrame(data={'energy':  np.concatenate(e_distances).ravel(), 'num_samples': samples_column})
+    means = pd.DataFrame(data={'energy': e_means, 'num_samples': s})
+
+    plt.figure(figsize=(5.5,3.5))
+    ax = plt.gca()
+
+    sns.stripplot(x="num_samples", y="energy", data=energy, color='limegreen', alpha=0.5, s=2, ax=ax, )
+    sns.stripplot(x="num_samples", y="energy", data=means, s=16, marker='^', color='black', ax=ax, jitter=False)
+    sns.stripplot(x="num_samples", y="energy", data=means, s=12, marker='^',color='limegreen', ax=ax, jitter=False)
+    ax.set_title('LIDC (Probabilistic U-Net)', y=1)
+    fs=11
+    ax.set_ylabel(r'$D_{GED}^{2}$', fontsize=fs)
+    ax.set_xlabel('# samples', fontsize=fs)
+
+    plt.show()
 
 
-e_distances = []
-e_means = []
-for s in [1,4,8,16]:
-    e_dist = calc_energy_distances(d_matrices, num_samples=s) 
-    e_dist = e_dist[~np.isnan(e_dist)]
-    e_distances.append(e_dist)
-    e_means.append(np.mean(e_dist))
-
-print(e_means)
-
-with open('energy.pkl', 'wb') as fp:
-    pickle.dump(e_distances, fp)
-    pickle.dump(e_means, fp)
-
+if __name__ == "__main__":
+    # save distance matrix in matrixfilename and final energy distance result in energyfilename
+    matrixfilename = 'matrix.pkl'
+    energyfilename = 'energy.pkl'
+    eval_matrix(matrixfilename)
+    eval_energy(matrixfilename,energyfilename)
+    draw_plot(energyfilename)
 

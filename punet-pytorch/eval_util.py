@@ -1,3 +1,5 @@
+# The code below used for calculating generalized energy distance is copied from https://github.com/stefanknegt/Probabilistic-Unet-Pytorch
+
 import numpy as np
 
 def get_energy_distance_components(gt_seg_modes, seg_samples, eval_class_ids, ignore_mask=None):
