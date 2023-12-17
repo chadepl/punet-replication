@@ -16,28 +16,15 @@ from punet import ProbabilisticUnet
 # Params #
 ##########
 
-# For now shared to avoid problems in train/test scenarios
+run_id = f"NicolasTest-lidc-patches-lv3"
 
-BATCH_SIZE = 32
-DEVICE = ["cpu", "mps", "cuda"][0]
-EPOCHS = int(240000 * 32 * (1 / 8882))
-NUM_CLASSES = 1
-NUM_CHANNELS = [32, 64, 128, 256]  # original in paper   
+from punet_config import DEVICE, NUM_WORKERS
+from punet_config import NUM_CLASSES, NUM_CHANNELS, LATENT_DIM, NUM_CONVS_FCOMB
+from punet_config import BATCH_SIZE, EPOCHS, BETA, VAL_FREQ, LEARNING_RATE, REG_WEIGHT
 
-LATENT_DIM=6  # # original in paper (3 for image2image VAE and 6 for PUnet)
-NUM_CONVS_FCOMB=3 # original in paper   
-BETA=1.0 # original in paper (10 for image2image VAE and 1 for PUnet)
-
-VAL_FREQ = 10  # run validation every number of epochs
-LEARNING_RATE = 1e-4
-REG_WEIGHT = 1e-5
-
-NUM_WORKERS = 32
-
-############
-# Training #
-############
-
+########
+# Data #
+########
 
 transforms = dict(
     rand_elastic=dict(
@@ -57,6 +44,10 @@ transforms = dict(
 train_dataset = LIDCCrops(data_home="../data/lidc_crops", split="train", transform=transforms)
 val_dataset = LIDCCrops(data_home="../data/lidc_crops", split="val", transform=None)
 
+############
+# Training #
+############
+
 train_punet(train_dataset=train_dataset,
             batch_size_train=BATCH_SIZE,
             val_dataset=val_dataset,
@@ -67,7 +58,10 @@ train_punet(train_dataset=train_dataset,
             latent_dim=LATENT_DIM,
             no_convs_fcomb=NUM_CONVS_FCOMB,
             beta=BETA,
-            train_id=f"NicolasTest-lidc-patches-lv3",
+            learning_rate=LEARNING_RATE, 
+            val_freq=VAL_FREQ,
+            reg_weight=REG_WEIGHT,
+            train_id=run_id,
             device=DEVICE, num_workers=NUM_WORKERS)
 
 
